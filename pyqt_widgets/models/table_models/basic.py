@@ -68,7 +68,7 @@ class TableModel(QAbstractTableModel):
         return len(self.header)
 
     # noinspection PyUnresolvedReferences
-    def setHeaderData(self, section, orientation, role):
+    def setHeaderData(self, section, orientation, value, role):
         """ Called to set the data for a given column in the header.
 
         :param section: The header section to change.
@@ -125,7 +125,7 @@ class TableModel(QAbstractTableModel):
             return False
 
         elif index.column() >= len(self.header):
-            return
+            return False
 
         elif not role == Qt.EditRole:
             return False
@@ -162,7 +162,7 @@ class TableModel(QAbstractTableModel):
 
         table_row = index.internalPointer()
         column_name = self.header[index.column()]
-        data = table_row.data[column_name]
+        data = table_row[column_name]
 
         if not isinstance(data, QObject):
             if not data:
@@ -186,7 +186,7 @@ class TableModel(QAbstractTableModel):
         :return: TableRow instance that was added to the model.
         """
         row = self.rowCount()
-        table_row = TableRow(data, row)
+        table_row = TableRow(self.pack_dictionary(data), row)
         key_value = data[self.key_column]
 
         self.beginInsertRows(QModelIndex(), row, row)
@@ -252,19 +252,6 @@ class TableModel(QAbstractTableModel):
         top_left = self.createIndex(row, 0, node)
         bottom_right = self.createIndex(row, len(self.header), node)
         self.dataChanged.emit(top_left, bottom_right)
-
-    def find_index(self, pointer):
-        """ Helper method to find a QModelIndex that points to a given pointer.
-
-        :param pointer: The TableRow to find a QModelIndex for.
-        :return: QModelIndex, or None.
-        """
-        for index in self.persistentIndexList():
-            if index.column() != 0:
-                continue
-
-            if index.internalPointer() == pointer:
-                return index
 
     def match_pattern(self, section, pattern):
         """ Match a given regex pattern to the rows in our table, and create a list of rows that matched.
