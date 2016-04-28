@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='python_utilities',
-    version='1.0.0',
-    packages=('python_utils', 'python_utils.os_util'),
+    version='1.0.1',
+    packages=(find_packages()),
     url = 'https://github.com/TheKewlStore/PythonUtilities',
     license = '',
     author = 'Ian Davis',

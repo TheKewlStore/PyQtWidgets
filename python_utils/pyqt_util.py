@@ -10,7 +10,7 @@ from PyQt4.QtCore import QSize
 from PyQt4.QtGui import QApplication
 from PyQt4.QtTest import QTest
 
-from pyqt_widgets.util import os_util
+import os_util
 
 
 def animated_resize(widget, width=0, height=0):
