@@ -2,18 +2,40 @@ from collections import OrderedDict as OrderedDictionary
 
 from PyQt4.QtCore import QAbstractItemModel
 from PyQt4.QtCore import QModelIndex
-from PyQt4.QtCore import QObject
 from PyQt4.QtCore import Qt
 
+from pyqt_widgets.models.basic import BasicModel
 from pyqt_widgets.models.item_model import ItemModel
 
 
 class TreeItem(ItemModel):
     def __init__(self, data, parent=None):
-        ItemModel.__init__(data, parent)
+        ItemModel.__init__(self, data, parent)
+
+        self.children = OrderedDictionary()
+
+    def remove_child(self, key_value):
+        if key_value not in self.children:
+            raise KeyError('No such child exists')
+
+        del self.children[key_value]
+
+    def row(self):
+        """ This method is necessary because of the parent-child node structure of the model, where there is no simple
+            way to find the overall relationship of all the items in the database, rather just one items' relationship
+            with those surrounding it.
+        :return: int
+        """
+        if not self.parent:
+            return 0
+
+        return self.parent.children.values().index(self)
+
+    def __iter__(self):
+        return self.children.itervalues()
 
 
-class TreeModel(QAbstractItemModel):
+class TreeModel(BasicModel):
     """ TreeModel is an implementation of PyQt's QAbstractItemModel that overrides default indexing support to use
         python dictionaries mapping a column in the table header supplied to a value for said column. The goal here
         is to simplify indexing by being able to manage the data in a table based on string keys instead of arbitrary
@@ -26,37 +48,55 @@ class TreeModel(QAbstractItemModel):
         :type header: Iterable
         :param parent: A QWidget that QT will give ownership of this Widget too.
         """
-        super(TreeModel, self).__init__(parent)
+        BasicModel.__init__(self, header, header_types, key_column, parent)
 
-        self.header = header
-        self.header_types = header_types
+        self.root = TreeItem(self.pack_dictionary({}))
 
-        if not self.header_types:
-            for column in self.header:
-                self.header_types[column] = 'string'
-
-        self.key_column = key_column
-
-        if not self.key_column:
-            self.key_column = self.header[0]
-
-        self.root = TreeItem(header)
-
-    def find_index(self, pointer):
-        """ Helper method to find a QModelIndex that points to a given pointer.
-
-            NOTE: Intended as an internal helper method, as you should almost never need a QModelIndex
-                with this implementation, but left public and available in case it should be needed.
-
-        :param pointer: The TableRow to find a QModelIndex for.
-        :return: QModelIndex, or None.
+    def add_node(self, values, children=None, parent=None):
+        """ Add a new root TreeItem to our model, using the values passed as the data.
+            Optional args: children, parent
+        :param values: A dictionary mapping the model's header to the values to use for this TreeItem.
+        :param children: A collection of dictionaries mapping the model's header to the values to use for each child
+            TreeItem.
+        :param parent: The parent to give ownership of this TreeItem too, if not given, defaults to the root TreeItem
+        :return: The TreeItem instance that was added.
         """
-        for index in self.persistentIndexList():
-            if index.column() != 0:
-                continue
+        if not parent:
+            parent = self.root
 
-            if index.internalPointer() == pointer:
-                return index
+        key = values[self.key_column]
+        node = TreeItem(self.pack_dictionary(values), parent)
+
+        if children:
+            for values_ in children:
+                self.add_node(values_, parent=node)
+
+        parent.children[key] = node
+
+        self._connect_node(node)
+        return node
+
+    def remove_node(self, node):
+        """ Remove the given node from the tree view
+        :param node: TreeItem to remove
+        :return: bool
+        """
+        self.layoutAboutToBeChanged.emit()
+
+        parent = node.parent
+        parent.remove_child(node[self.key_column])
+
+        self.layoutChanged.emit()
+
+    def find_node(self, key_value, parent=None):
+        if not parent:
+            parent = self.root
+
+        for child in parent:
+            if child[self.key_column] == key_value:
+                return child
+
+        raise KeyError('No node matching {key_value} exists'.format(key_value))
 
     def _connect_node(self, node):
         """ Helper function used to connect the data changed signals of our TreeItem to the notify_data_changed method.
@@ -79,49 +119,6 @@ class TreeModel(QAbstractItemModel):
         bottom_right = self.createIndex(row, len(self.header), node)
         self.dataChanged.emit(top_left, bottom_right)
 
-    def add_node(self, values, children=None, parent=None):
-        """ Add a new root TreeItem to our model, using the values passed as the data.
-            Optional args: children, parent
-        :param values: A dictionary mapping the model's header to the values to use for this TreeItem.
-        :param children: A collection of dictionaries mapping the model's header to the values to use for each child
-            TreeItem.
-        :param parent: The parent to give ownership of this TreeItem too, if not given, defaults to the root TreeItem
-        :return: The TreeItem instance that was added.
-        """
-        if not parent:
-            parent = self.root
-
-        key = values[self.key_column]
-        node = TreeItem(values, parent)
-
-        if children:
-            for values_ in children:
-                self.add_node(values_, parent=node)
-
-        parent.children[key] = node
-
-        self._connect_node(node)
-        return node
-
-    def remove_node(self, key_value, parent=None):
-        """ Remove the node that matches the key value and parent given.
-        :param key_value: str
-        :param parent: TreeItem
-        :return: bool
-        """
-        if not parent:
-            parent = self.root
-
-        parent_index = self.find_index(parent)
-        if key_value not in parent.children:
-            raise KeyError('{key} not found in {node}'.format(key=key_value, node=parent[self.key_column]))
-
-        row = parent.children.keys().index(key_value)
-
-        self.removeRow(row, parent_index)
-
-        return True
-
     def flags(self, index):
         """ QAbstractItemModel override method that is used to set the flags for the item at the given QModelIndex.
             Here, we just set all indexes to enabled, and selectable.
@@ -129,33 +126,7 @@ class TreeModel(QAbstractItemModel):
         """
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
-    def data(self, index, role):
-        """ Return the data to display for the given index and the given role.
-            This method should not be called directly. This method is called implicitly by the QTreeView that is
-            displaying us, as the way of finding out what to display where.
-        :param index:
-        :param role:
-        """
-        if not index.isValid():
-            return
-
-        elif not role == Qt.DisplayRole:
-            return
-
-        item = index.internalPointer()
-        column = self.header[index.column()]
-
-        if column not in item.data:
-            return
-
-        data = item.data[column]
-
-        if not isinstance(data, QObject):
-            data = str(data)
-
-        return data
-
-    def index(self, row, col, parent):
+    def index(self, row, col, parent=None):
         """ Return a QModelIndex instance pointing the row and column underneath the parent given.
             This method should not be called directly. This method is called implicitly by the QTreeView that is
             displaying us, as the way of finding out what to display where.
@@ -202,33 +173,20 @@ class TreeModel(QAbstractItemModel):
 
         return self.createIndex(parent.row(), 0, parent)
 
-    def rowCount(self, parent):
+    def rowCount(self, index=None):
         """ Return the number of rows a given index has under it. If an invalid QModelIndex is supplied, return the
                 number of children under the root.
 
         :param parent: QModelIndex
         """
-        if parent.column() > 0:
+        if not index or not index.isValid():
+            return len(self.root.children)
+        elif index.column() > 0:
             return 0
-
-        if not parent.isValid():
-            parent = self.root
-
         else:
-            parent = parent.internalPointer()
+            node = index.internalPointer()
 
-        return len(parent.children)
-
-    def headerData(self, section, orientation, role):
-        """ Return the header data for the given section, orientation and role. This method should not be called
-            directly. This method is called implicitly by the QTreeView that is displaying us, as the way of finding
-            out what to display where.
-        :param section:
-        :param orientation:
-        :param role:
-        """
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return self.root.data[section]
+        return len(node.children)
 
     def __iter__(self):
         for child in self.root.children.itervalues():
