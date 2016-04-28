@@ -14,6 +14,9 @@ from PyQt4.QtCore import QModelIndex
 from PyQt4.QtCore import QObject
 from PyQt4.QtCore import Qt
 
+from pyqt_widgets import widgets
+
+from pyqt_widgets.models.basic import BasicModel
 from pyqt_widgets.models.item_model import ItemModel
 
 
@@ -24,7 +27,7 @@ class TableRow(ItemModel):
         self.row = row
 
 
-class TableModel(QAbstractTableModel):
+class TableModel(BasicModel, QAbstractTableModel):
     """ TableModel is an implementation of PyQt's QAbstractTableModel that overrides default indexing to use dictionary key-based mapping,
         mapping a column in the table's header to a value for that column. The goal here is to simplify indexing by being able to manage
         the data in a table based on string keys instead of arbitrary indexes, eliminating the need to cross-reference a header to find where
@@ -38,20 +41,8 @@ class TableModel(QAbstractTableModel):
         :param key_column: The primary key column for the table (the column to reference rows by).z
         :param parent: The QT Parent widget.
         """
+        BasicModel.__init__(self, header, header_types, key_column)
         QAbstractTableModel.__init__(self, parent)
-
-        self.header = header
-        self.header_types = header_types
-
-        if not self.header_types:
-            self.header_types = {}
-            for column in self.header:
-                self.header_types[column] = 'string'
-
-        self.key_column = key_column
-
-        if not self.key_column:
-            self.key_column = self.header[0]
 
         self.table_data = OrderedDictionary()
 
@@ -60,12 +51,6 @@ class TableModel(QAbstractTableModel):
         :param parent:
         """
         return len(self.table_data)
-
-    def columnCount(self, parent=QModelIndex()):
-        """ Model-method, called by the view to determine how many columns are to be displayed at a given time.
-        :param parent:
-        """
-        return len(self.header)
 
     # noinspection PyUnresolvedReferences
     def setHeaderData(self, section, orientation, value, role):
@@ -123,15 +108,14 @@ class TableModel(QAbstractTableModel):
         """
         if not index.isValid():
             return False
-
         elif index.column() >= len(self.header):
             return False
-
         elif not role == Qt.EditRole:
             return False
 
         table_row = index.internalPointer()
         column_name = self.header[index.column()]
+
         if hasattr(data, 'toString'):
             table_row[column_name] = unicode(data.toString())
         else:
@@ -150,13 +134,10 @@ class TableModel(QAbstractTableModel):
         """
         if not index.isValid():
             return
-
         elif index.column() >= len(self.header):
             return
-
         elif role == Qt.TextAlignmentRole:
             return Qt.AlignCenter
-
         elif not role == Qt.DisplayRole:
             return
 
@@ -276,16 +257,3 @@ class TableModel(QAbstractTableModel):
                 rows_to_hide.append(table_row.row)
 
         return rows_to_hide
-
-    def pack_dictionary(self, dictionary):
-        """ Given a dictionary, create a new dictionary with columns missing from the original replaced with empty strings.
-
-        :param dictionary: The dictionary to pack.
-        :return: The packed dictionary.
-        """
-        packed_dictionary = {}
-
-        for column in self.header:
-            packed_dictionary[column] = dictionary.get(column, '')
-
-        return packed_dictionary

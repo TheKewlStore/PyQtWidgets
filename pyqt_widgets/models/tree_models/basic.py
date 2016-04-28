@@ -20,7 +20,7 @@ class TreeModel(QAbstractItemModel):
         indexes, eliminating the need to cross-reference a header to find where to put a value.
     """
 
-    def __init__(self, header, header_types=None, key_column=0, parent=None):
+    def __init__(self, header, header_types=None, key_column=None, parent=None):
         """ TreeModel constructor
         :param header: The header to use
         :type header: Iterable
@@ -35,7 +35,11 @@ class TreeModel(QAbstractItemModel):
             for column in self.header:
                 self.header_types[column] = 'string'
 
-        self.key_column = self.header[key_column]
+        self.key_column = key_column
+
+        if not self.key_column:
+            self.key_column = self.header[0]
+
         self.root = TreeItem(header)
 
     def find_index(self, pointer):
@@ -214,13 +218,6 @@ class TreeModel(QAbstractItemModel):
             parent = parent.internalPointer()
 
         return len(parent.children)
-
-    def columnCount(self, parent):
-        """ Return the number of columns in the model header. The parent parameter exists only to support the signature
-                of QAbstractItemModel.
-        :param parent:
-        """
-        return len(self.header)
 
     def headerData(self, section, orientation, role):
         """ Return the header data for the given section, orientation and role. This method should not be called

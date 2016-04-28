@@ -114,3 +114,39 @@ def test_data_functions(qtbot, table_model):
             assert table_model.setData(index, 'Row1_Column1_Old', Qt.EditRole) == True
 
     assert table_row['Column1'] == 'Row1_Column1_Old'
+
+
+def test_match_pattern(table_model):
+    for data in TABLE_DATA:
+        table_model.add_row(data)
+
+    table_rows = table_model.match_pattern(0, 'Row[0-9]_Column1')
+    assert len(table_rows) == 0
+
+    table_rows = table_model.match_pattern(1, 'Row[0-9]_Column2')
+    assert len(table_rows) == 0
+
+    table_rows = table_model.match_pattern(2, 'Row[0-9]_Column5')
+    assert len(table_rows) == 4
+
+    table_rows = table_model.match_pattern(0, 'Row1_Column1')
+    assert len(table_rows) == 3
+
+    table_rows = table_model.match_pattern(0, 'Row[1-3]_Column1')
+    assert len(table_rows) == 1
+
+    table_rows = table_model.match_pattern(0, '\Row(1-3_Column1')
+
+
+def test_pack_dictionary(table_model):
+    only_one = {'Column1': 'Value1'}
+    packed = table_model.pack_dictionary(only_one)
+
+    for column in TABLE_HEADER:
+        assert column in packed
+
+    multiple = {'Column1': 'Value1', 'Column3': 'Value3', 'Column5': 'Value5'}
+    packed = table_model.pack_dictionary(multiple)
+
+    for column in TABLE_HEADER:
+        assert column in packed
