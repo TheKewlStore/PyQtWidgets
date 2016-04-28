@@ -162,7 +162,7 @@ def memory_statistics():
 
 def _windows_memory():
     if not wmi:
-        raise ImportError('Python module wmi is not available on this system!')
+        raise OSError('Python module wmi is not available on this system!')
 
     component = wmi.WMI()
 
