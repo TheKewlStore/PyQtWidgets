@@ -48,3 +48,11 @@ def test_item_set(qtbot, item_model):
 
 def test_item_parent(item_model):
     assert item_model.parent == PARENT
+
+
+def test_dictionary_interface(item_model):
+    assert sorted(item_model.iteritems()) == sorted(DATA.iteritems())
+    assert sorted(item_model.iterkeys()) == sorted(DATA.iterkeys())
+    assert sorted(item_model.itervalues()) == sorted(DATA.itervalues())
+    assert str(item_model) == str(DATA)
+    assert 'Column1' in item_model

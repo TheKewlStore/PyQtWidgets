@@ -1,5 +1,7 @@
 import pytest
 
+from PyQt4.QtCore import QModelIndex
+from PyQt4.QtCore import QVariant
 from PyQt4.QtCore import Qt
 
 from pyqt_widgets.models import TreeModel, TreeItem
@@ -21,13 +23,6 @@ def tree_model():
 def test_interface_methods(qtbot, tree_model):
     """ Verify functionality of the basic QAbstractTableModel interface methods for our table model override.
     """
-    assert tree_model.columnCount() == 5
-    assert tree_model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == 'Column1'
-
-    with qtbot.waitSignal(tree_model.headerDataChanged, raising=True):
-        tree_model.setHeaderData(0, Qt.Horizontal, 'NewColumn1', Qt.DisplayRole)
-        assert tree_model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == 'Column1'
-
     assert tree_model.flags(tree_model.index(0, 0)) == Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
 
@@ -35,26 +30,38 @@ def test_add_node(qtbot, tree_model):
     """ Verify functionality of adding a row(s) to the model.
     """
 
-    for table_row, data in enumerate(TREE_DATA):
+    for index, data in enumerate(TREE_DATA):
         actual_node = tree_model.add_node(data)
 
-        key_value = 'Row{0}_Column1'.format(table_row + 1)
-        expected_node = TREE_DATA[table_row]
+        key_value = 'Row{0}_Column1'.format(index + 1)
+        expected_node = TREE_DATA[index]
 
         assert actual_node['Column1'] == expected_node['Column1']
         assert actual_node['Column2'] == expected_node['Column2']
         assert actual_node['Column3'] == expected_node['Column3']
         assert actual_node['Column4'] == expected_node['Column4']
         assert actual_node['Column5'] == expected_node['Column5']
-        assert tree_model.rowCount() == table_row + 1
+        assert tree_model.rowCount() == index + 1
         assert key_value in tree_model.root.children
 
-    table_row = tree_model.add_node({'Column1': 'Row5_Column1', 'Column3': 'Row5_Column3'})
-    assert table_row['Column1'] == 'Row5_Column1'
-    assert table_row['Column2'] == ''
-    assert table_row['Column3'] == 'Row5_Column3'
-    assert table_row['Column4'] == ''
-    assert table_row['Column5'] == ''
+    tree_node = tree_model.add_node({'Column1': 'Row5_Column1', 'Column3': 'Row5_Column3'})
+    assert tree_node['Column1'] == 'Row5_Column1'
+    assert tree_node['Column2'] == ''
+    assert tree_node['Column3'] == 'Row5_Column3'
+    assert tree_node['Column4'] == ''
+    assert tree_node['Column5'] == ''
+
+    tree_node = tree_model.add_node(TREE_DATA[0], children=[TREE_DATA[1], TREE_DATA[2]])
+    assert len(tree_node.children) == 2
+
+
+def test_find_node(tree_model):
+    tree_node = tree_model.add_node(TREE_DATA[0])
+    found_node = tree_model.find_node(tree_node['Column1'])
+    assert found_node == tree_node
+
+    with pytest.raises(KeyError):
+        found_node = tree_model.find_node('Row5_Column1')
 
 
 def test_remove_node(qtbot, tree_model):
@@ -79,32 +86,74 @@ def test_remove_node(qtbot, tree_model):
             with qtbot.waitSignal(tree_model.layoutAboutToBeChanged, raising=True):
                 tree_model.remove_node(node)
 
+    parent_node = tree_model.add_node(TREE_DATA[0])
+    child_node = tree_model.add_node(TREE_DATA[1], parent=parent_node)
+
+    del parent_node.children[child_node['Column1']]
+
+    with pytest.raises(KeyError):
+        tree_model.remove_node(child_node)
+
+
+def test_parent_index(tree_model):
+    parent_node = tree_model.add_node(TREE_DATA[0])
+    child_node = tree_model.add_node(TREE_DATA[1], parent=parent_node)
+
+    parent_index = tree_model.index(0, 0)
+    child_index = tree_model.index(0, 0, parent=parent_index)
+
+    assert tree_model.data(child_index, Qt.DisplayRole) == child_node['Column1']
+
+    assert tree_model.parent() == QModelIndex()
+    assert tree_model.parent(QModelIndex()) == QModelIndex()
+    assert tree_model.parent(parent_index) == QModelIndex()
+    assert tree_model.parent(child_index) == parent_index
+
 
 def test_data_functions(qtbot, tree_model):
     """ Verify that the interface methods data and setData follow all expected procedures and emit signals properly.
     """
-    table_row = tree_model.add_node(TREE_DATA[0])
+    tree_node = tree_model.add_node(TREE_DATA[0])
     index = tree_model.index(0, 0)
-    assert tree_model.data(index, Qt.DisplayRole) == table_row['Column1']
+
+    assert tree_model.data(index, Qt.DisplayRole) == tree_node['Column1']
 
     with qtbot.waitSignal(tree_model.dataChanged, raising=True):
-        with qtbot.waitSignal(table_row.changed, raising=True):
-            table_row['Column1'] = 'Row1_Column1_New'
+        with qtbot.waitSignal(tree_node.changed, raising=True):
+            tree_node['Column1'] = 'Row1_Column1_New'
 
     assert tree_model.data(index, Qt.DisplayRole) == 'Row1_Column1_New'
-
-    invalid_index = tree_model.index(-1, -1)
-    unbound_index = tree_model.index(0, 10)
+    assert tree_model.data(index, Qt.TextAlignmentRole) == Qt.AlignCenter
+    assert tree_model.data(index, Qt.EditRole) == None
 
     assert tree_model.setData(index, 'Row1_Column1_Old', Qt.DisplayRole) == False
+
+    with qtbot.waitSignal(tree_model.dataChanged, raising=True):
+        with qtbot.waitSignal(tree_node.changed, raising=True):
+            assert tree_model.setData(index, 'Row1_Column1_Old', Qt.EditRole) == True
+
+    assert tree_node['Column1'] == 'Row1_Column1_Old'
+
+    invalid_index = QModelIndex()
+    unbound_index = tree_model.index(0, 10)
+
+    assert tree_model.data(invalid_index, Qt.DisplayRole) == None
+    assert tree_model.data(unbound_index, Qt.DisplayRole) == None
+
     assert tree_model.setData(invalid_index, 'Row1_Column1_Old', Qt.EditRole) == False
     assert tree_model.setData(unbound_index, 'Row1_Column10_Old', Qt.EditRole) == False
 
-    with qtbot.waitSignal(tree_model.dataChanged, raising=True):
-        with qtbot.waitSignal(table_row.changed, raising=True):
-            assert tree_model.setData(index, 'Row1_Column1_Old', Qt.EditRole) == True
+    data = QVariant('Row1_Column1_New')
 
-    assert table_row['Column1'] == 'Row1_Column1_Old'
+    with qtbot.waitSignal(tree_model.dataChanged, raising=True):
+        with qtbot.waitSignal(tree_node.changed, raising=True):
+            assert tree_model.setData(index, data, Qt.EditRole) == True
+
+    assert tree_node['Column1'] == data
+    assert tree_model.data(index, Qt.DisplayRole) == data
+
+    tree_node['Column1'] = None
+    assert tree_model.data(index, Qt.DisplayRole) == ''
 
 
 def test_pack_dictionary(tree_model):
@@ -119,3 +168,31 @@ def test_pack_dictionary(tree_model):
 
     for column in TREE_HEADER:
         assert column in packed
+
+
+def test_row_count(tree_model):
+    tree_node = tree_model.add_node(TREE_DATA[0])
+    assert tree_model.rowCount() == 1
+    assert tree_model.rowCount(QModelIndex()) == 1
+
+    invalid_index = tree_model.index(0, 1)
+    assert tree_model.rowCount(invalid_index) == 0
+
+    child_node1 = tree_model.add_node(TREE_DATA[1], parent=tree_node)
+    child_node2 = tree_model.add_node(TREE_DATA[2], parent=tree_node)
+
+    parent_index = tree_model.index(0, 0)
+
+    assert tree_model.rowCount(parent_index) == 2
+
+    assert tree_model.root.row() == 0
+
+
+def test_iterator(tree_model):
+    tree_nodes = []
+
+    for data in TREE_DATA:
+        tree_nodes.append(tree_model.add_node(data))
+
+    for actual_node, expected_node in zip(tree_model, tree_nodes):
+        assert actual_node == expected_node

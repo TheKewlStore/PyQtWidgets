@@ -1,5 +1,7 @@
 import pytest
 
+from PyQt4.QtCore import QModelIndex
+from PyQt4.QtCore import QVariant
 from PyQt4.QtCore import Qt
 
 from pyqt_widgets.models import TableModel, TableRow
@@ -21,13 +23,6 @@ def table_model():
 def test_interface_methods(qtbot, table_model):
     """ Verify functionality of the basic QAbstractTableModel interface methods for our table model override.
     """
-    assert table_model.columnCount() == 5
-    assert table_model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == 'Column1'
-
-    with qtbot.waitSignal(table_model.headerDataChanged, raising=True):
-        table_model.setHeaderData(0, Qt.Horizontal, 'NewColumn1', Qt.DisplayRole)
-        assert table_model.headerData(0, Qt.Horizontal, Qt.DisplayRole) == 'Column1'
-
     assert table_model.flags(table_model.index(0, 0)) == Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
 
 
@@ -94,6 +89,7 @@ def test_data_functions(qtbot, table_model):
     """
     table_row = table_model.add_row(TABLE_DATA[0])
     index = table_model.index(0, 0)
+
     assert table_model.data(index, Qt.DisplayRole) == table_row['Column1']
 
     with qtbot.waitSignal(table_model.dataChanged, raising=True):
@@ -101,19 +97,36 @@ def test_data_functions(qtbot, table_model):
             table_row['Column1'] = 'Row1_Column1_New'
 
     assert table_model.data(index, Qt.DisplayRole) == 'Row1_Column1_New'
-
-    invalid_index = table_model.index(-1, -1)
-    unbound_index = table_model.index(0, 10)
+    assert table_model.data(index, Qt.TextAlignmentRole) == Qt.AlignCenter
+    assert table_model.data(index, Qt.EditRole) == None
 
     assert table_model.setData(index, 'Row1_Column1_Old', Qt.DisplayRole) == False
-    assert table_model.setData(invalid_index, 'Row1_Column1_Old', Qt.EditRole) == False
-    assert table_model.setData(unbound_index, 'Row1_Column10_Old', Qt.EditRole) == False
 
     with qtbot.waitSignal(table_model.dataChanged, raising=True):
         with qtbot.waitSignal(table_row.changed, raising=True):
             assert table_model.setData(index, 'Row1_Column1_Old', Qt.EditRole) == True
 
     assert table_row['Column1'] == 'Row1_Column1_Old'
+
+    invalid_index = QModelIndex()
+    unbound_index = table_model.index(0, 10)
+
+    assert table_model.data(invalid_index, Qt.DisplayRole) == None
+    assert table_model.data(unbound_index, Qt.DisplayRole) == None
+    assert table_model.setData(invalid_index, 'Row1_Column1_Old', Qt.EditRole) == False
+    assert table_model.setData(unbound_index, 'Row1_Column10_Old', Qt.EditRole) == False
+
+    data = QVariant('Row1_Column1_New')
+
+    with qtbot.waitSignal(table_model.dataChanged, raising=True):
+        with qtbot.waitSignal(table_row.changed, raising=True):
+            assert table_model.setData(index, data, Qt.EditRole) == True
+
+    assert table_row['Column1'] == data
+    assert table_model.data(index, Qt.DisplayRole) == data
+
+    table_row['Column1'] = None
+    assert table_model.data(index, Qt.DisplayRole) == ''
 
 
 def test_match_pattern(table_model):

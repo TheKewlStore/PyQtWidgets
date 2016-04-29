@@ -136,7 +136,6 @@ class TreeModel(BasicModel):
         """
         if not parent or not parent.isValid():
             parent = self.root
-
         else:
             parent = parent.internalPointer()
 
@@ -158,7 +157,6 @@ class TreeModel(BasicModel):
         """
         if not index:
             return QModelIndex()
-
         elif not index.isValid():
             return QModelIndex()
 
@@ -166,9 +164,6 @@ class TreeModel(BasicModel):
         parent = child.parent
 
         if parent == self.root:
-            return QModelIndex()
-
-        elif child == self.root:
             return QModelIndex()
 
         return self.createIndex(parent.row(), 0, parent)
